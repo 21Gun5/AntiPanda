@@ -7,6 +7,8 @@
 #include "AntiPandaDlg.h"
 #include "afxdialogex.h"
 #include "Func.h"
+#include <string>
+using namespace std;
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -66,6 +68,10 @@ BEGIN_MESSAGE_MAP(CAntiPandaDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BUTTON_KILL, &CAntiPandaDlg::OnBnClickedButtonKill)
+	ON_BN_CLICKED(IDC_BUTTON_DELVIRUS, &CAntiPandaDlg::OnBnClickedButtonDelvirus)
+	ON_BN_CLICKED(IDC_BUTTON_DELINI, &CAntiPandaDlg::OnBnClickedButtonDelini)
+	ON_BN_CLICKED(IDC_BUTTON_REPAIRREG, &CAntiPandaDlg::OnBnClickedButtonRepairreg)
+	ON_BN_CLICKED(IDC_BUTTON_REPAIRFILE, &CAntiPandaDlg::OnBnClickedButtonRepairfile)
 END_MESSAGE_MAP()
 
 
@@ -154,68 +160,62 @@ HCURSOR CAntiPandaDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-
-
 void CAntiPandaDlg::OnBnClickedButtonKill()
 {
 	// TODO: 在此添加控件通知处理程序代码
-	// 1 结束病毒进程spo0
-	BOOL bIsFindVirusProcess = FALSE;
-	DWORD dwPid = 0;
-	bIsFindVirusProcess = FindTargetProcess("spo0lsv.exe", &dwPid);
-	//bIsFindVirusProcess = FindTargetProcess("notepad.exe", &dwPid);
-	if (bIsFindVirusProcess == TRUE)
+
+	// 结束病毒进程
+	BOOL bRet = FALSE;		// 操作是否成功
+	DWORD dwPid = 0;		// 病毒进程ID
+	// 1 查找进程
+	bRet = FindTargetProcess("spo0lsv.exe", &dwPid);
+	if (bRet == TRUE)
 	{
-		csTxt = _T("遍历进程\r\n");
-		csTxt += _T("发现病毒进程:spoclsv.exe\r\n");
-		csTxt += _T("准备查杀\r\n");
-		SetDlgItemText(IDC_EDIT1, csTxt);
-		// 提升权限
-		bIsFindVirusProcess = EnableDebugPrivilege(SE_DEBUG_NAME);
-		if (bIsFindVirusProcess == FALSE)
-		{
-			csTxt += _T("提升权限失败\r\n");
-		}
+		csTxt = _T("发现病毒进程：spo0lsv.exe\r\n");
+		//SetDlgItemText(IDC_EDIT1, csTxt);
+		// 2 提升权限
+		bRet = EnableDebugPrivilege(SE_DEBUG_NAME);
+		if (bRet == FALSE)
+			csTxt += _T("提升权限：失败\r\n");
 		else
-		{
-			csTxt += _T("提升权限成功！\r\n");
-		}
-		SetDlgItemText(IDC_EDIT1, csTxt);
-		// 打开并尝试结束病毒进程
+			csTxt += _T("提升权限：成功\r\n");
+		//SetDlgItemText(IDC_EDIT1, csTxt);
+		// 3 打开进程获取句柄
 		HANDLE hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwPid);
 		if (hProcess == INVALID_HANDLE_VALUE)
 		{
-			csTxt += _T("无法结束病毒进程\r\n");
+			csTxt += _T("获取进程句柄：失败\r\n");
 			return;
 		}
-		bIsFindVirusProcess = TerminateProcess(hProcess, 0);
-		if (bIsFindVirusProcess == FALSE)
-		{
-			csTxt += _T("无法结束病毒进程\r\n");
-			return;
-		}
-		csTxt += _T("病毒进程已经结束\r\n");
-		SetDlgItemText(IDC_EDIT1, csTxt);
+		// 4 结束进程
+		bRet = TerminateProcess(hProcess, 0);
+		if (bRet == TRUE)
+			csTxt += _T("结束病毒进程：成功\r\n");
+		else
+			csTxt += _T("结束病毒进程：失败\r\n");
+		//SetDlgItemText(IDC_EDIT1, csTxt);
 		CloseHandle(hProcess);
 	}
 	else
 	{
-		csTxt += _T("未发现spoclsv.exe病毒进程\r\n");
+		csTxt += _T("未发现病毒进程：spo0lsv.exe\r\n");
 	}
-	// 2 删除病毒文件spo0
-	Sleep(10);
-	char szSysPath[MAX_PATH] = { 0 };
-	GetSystemDirectory(szSysPath, MAX_PATH);
-	lstrcat(szSysPath, "\\drivers\\spo0lsv.exe");
-	csTxt += _T("检查硬盘中是否存在spo0lsv.exe文件...\r\n");
-	if (GetFileAttributes(szSysPath) == 0xFFFFFFFF)
+	SetDlgItemText(IDC_EDIT1, csTxt);// 信息实时显示
+}
+
+void CAntiPandaDlg::OnBnClickedButtonDelvirus()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	// 删除病毒文件
+	char szTargetPath[MAX_PATH] = { 0 };
+	// 1 获取绝对路径
+	GetSystemDirectory(szTargetPath, MAX_PATH);
+	lstrcat(szTargetPath, "\\drivers\\spo0lsv.exe");
+	if (GetFileAttributes(szTargetPath) != 0xFFFFFFFF)
 	{
-		csTxt += _T("spoclsv.exe病毒文件不存在\r\n");
-	}
-	else
-	{
-		csTxt += _T("spoclsv.exe病毒文件存在，正在计算散列值\r\n");
-		HANDLE hFile = CreateFile(szSysPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		// 2 打开文件获取内容
+		HANDLE hFile = CreateFile(szTargetPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		if (hFile == INVALID_HANDLE_VALUE)
 		{
 			AfxMessageBox("Create Error");
@@ -233,10 +233,9 @@ void CAntiPandaDlg::OnBnClickedButtonKill()
 			AfxMessageBox("malloc Error");
 			return;
 		}
-
 		DWORD dwNum = 0;
 		ReadFile(hFile, pFile, dwSize, &dwNum, NULL);
-		// 计算spoclsv.exe的散列值
+		// 3 计算文件散列值
 		DWORD dwCrc32 = CRC32(pFile, dwSize);
 		if (pFile != NULL)
 		{
@@ -244,60 +243,102 @@ void CAntiPandaDlg::OnBnClickedButtonKill()
 			pFile = NULL;
 		}
 		CloseHandle(hFile);
-		// 0x89240FCD是“熊猫烧香”病毒的散列值
-
-		if (dwCrc32 == 0xE334747C || dwCrc32 == 0xF7C3654D)//E334747C //F7C3654D
+		// 4 通过散列值判断是否是目标文件
+		if (dwCrc32 == 0xE334747C || dwCrc32 == 0xF7C3654D)
 		{
-			csTxt += _T("spoclsv.exe校验和验证成功，正在删除...\r\n");
-			// 去除文件的隐藏、系统以及只读属性
-			DWORD dwFileAttributes = GetFileAttributes(szSysPath);
+			// 5 去除文件的隐藏、系统、只读属性
+			DWORD dwFileAttributes = GetFileAttributes(szTargetPath);
 			dwFileAttributes &= ~FILE_ATTRIBUTE_HIDDEN;
 			dwFileAttributes &= ~FILE_ATTRIBUTE_SYSTEM;
 			dwFileAttributes &= ~FILE_ATTRIBUTE_READONLY;
-			SetFileAttributes(szSysPath, dwFileAttributes);
-			// 删除spoclsv.exe
-			bIsFindVirusProcess = DeleteFile(szSysPath);
-			if (bIsFindVirusProcess)
-			{
-				csTxt += _T("spoclsv.exe病毒被删除！\r\n");
-			}
+			SetFileAttributes(szTargetPath, dwFileAttributes);
+			// 6 删除spoclsv.exe
+			BOOL bRet = DeleteFile(szTargetPath);
+			if (bRet)
+				csTxt += _T("spo0lsv.exe病毒删除：成功\r\n");
 			else
-			{
-				csTxt += _T("spoclsv.exe病毒无法删除\r\n");
-			}
+				csTxt += _T("spo0lsv.exe病毒删除：失败\r\n");
+		}
+	}
+	else
+	{
+		csTxt += _T("未发现病毒文件：spo0lsv.exe\r\n");
+	}
+	SetDlgItemText(IDC_EDIT1, csTxt);
+}
+
+void CAntiPandaDlg::OnBnClickedButtonRepairreg()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	// 修复注册表：删除病毒启动项
+	HKEY hKeyHKCU = NULL;
+	LONG lSize = MAXBYTE;
+	char cData[MAXBYTE] = { 0 };
+	char RegRun[] = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+	// 1 打开注册表：启动项
+	long lRet = RegOpenKey(HKEY_CURRENT_USER, RegRun, &hKeyHKCU);
+	if (lRet == ERROR_SUCCESS)
+	{
+		csTxt += _T("读取注册表启动项：成功\r\n");
+		// 2 是否存在病毒启动项
+		lRet = RegQueryValueEx(hKeyHKCU, "svcshare", NULL, NULL, (unsigned char *)cData, (unsigned long *)&lSize);
+		if (lRet == ERROR_SUCCESS)
+		{
+			csTxt += _T("注册表启动项：发现病毒记录\r\n");
+			// 3 删除病毒启动项
+			lRet = RegDeleteValue(hKeyHKCU, "svcshare");
+			if (lRet == ERROR_SUCCESS)
+				csTxt += _T("注册表：病毒启动项删除成功\r\n");
+			else
+				csTxt += _T("注册表：病毒启动项删除失败\r\n");
 		}
 		else
 		{
-			csTxt += _T("spoclsv.exe校验和验证失败\r\n");
+			csTxt += _T("注册表启动项：未发现病毒记录\r\n");
 		}
+		RegCloseKey(hKeyHKCU);
+	}
+	else
+	{
+		csTxt += _T("读取注册表启动项：失败\r\n");
 	}
 	SetDlgItemText(IDC_EDIT1, csTxt);
-	Sleep(10);
+}
 
-	//  3 删除每个盘符下的setup.exe与autorun.inf，以及Desktop_.ini
+void CAntiPandaDlg::OnBnClickedButtonDelini()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	// 删除setup.exe、autorun.inf、Desktop_.ini
+	BOOL bRet = FALSE;
 	char szDriverString[MAXBYTE] = { 0 };
 	char *pTmp = NULL;
-	//获取字符串类型的驱动器列表  
+	// 1 获取驱动器列表（之间用0隔开，最后0结尾
 	GetLogicalDriveStrings(MAXBYTE, szDriverString);
 	pTmp = szDriverString;
+	// 2 每次取出一个（0相隔
 	while (*pTmp)
 	{
+		// 3 构造绝对路径
 		char szAutorunPath[MAX_PATH] = { 0 };
 		char szSetupPath[MAX_PATH] = { 0 };
 		lstrcat(szAutorunPath, pTmp);
 		lstrcat(szAutorunPath, "autorun.inf");
 		lstrcat(szSetupPath, pTmp);
 		lstrcat(szSetupPath, "setup.exe");
-
+		// 4 查找文件
 		if (GetFileAttributes(szSetupPath) == 0xFFFFFFFF)
 		{
 			csTxt += pTmp;
-			csTxt += _T("setup.exe病毒文件不存在\r\n");
+			csTxt += _T("  未发现：setup.exe文件\r\n");
+			SetDlgItemText(IDC_EDIT1, csTxt);
 		}
 		else
 		{
 			csTxt += pTmp;
-			csTxt += _T("setup.exe病毒文件存在，正在进行计算校验和...\r\n");
+			csTxt += _T("  发现：setup.exe文件");
+			SetDlgItemText(IDC_EDIT1, csTxt);
+			// 4 打开文件获取内容
 			HANDLE hFile = CreateFile(szSetupPath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hFile == INVALID_HANDLE_VALUE)
 			{
@@ -316,10 +357,9 @@ void CAntiPandaDlg::OnBnClickedButtonKill()
 				AfxMessageBox("malloc Error");
 				return;
 			}
-
 			DWORD dwNum = 0;
 			ReadFile(hFile, pFile, dwSize, &dwNum, NULL);
-
+			// 5 计算文件散列值
 			DWORD dwCrc32 = CRC32(pFile, dwSize);
 			if (pFile != NULL)
 			{
@@ -327,125 +367,124 @@ void CAntiPandaDlg::OnBnClickedButtonKill()
 				pFile = NULL;
 			}
 			CloseHandle(hFile);
-
+			// 6 通过散列值判断是否是目标文件
 			if (dwCrc32 == 0xE334747C || dwCrc32 == 0xF7C3654D)
 			{
-				csTxt += _T("校验和验证成功，正在删除...\r\n");
-				// 去除文件的隐藏、系统以及只读属性
+				// 7 去除文件的隐藏、系统以及只读属性
 				DWORD dwFileAttributes = GetFileAttributes(szSetupPath);
 				dwFileAttributes &= ~FILE_ATTRIBUTE_HIDDEN;
 				dwFileAttributes &= ~FILE_ATTRIBUTE_SYSTEM;
 				dwFileAttributes &= ~FILE_ATTRIBUTE_READONLY;
 				SetFileAttributes(szSetupPath, dwFileAttributes);
-				// 删除setup.exe
-				bIsFindVirusProcess = DeleteFile(szSetupPath);
-				if (bIsFindVirusProcess)
+				// 8 删除setup.exe
+				bRet = DeleteFile(szSetupPath);
+				if (bRet)
 				{
 					csTxt += pTmp;
-					csTxt += _T("setup.exe病毒被删除!\r\n");
+					csTxt += _T("  setup.exe文件删除：成功\r\n");
 				}
 				else
 				{
 					csTxt += pTmp;
-					csTxt += _T("setup.exe病毒无法删除\r\n");
+					csTxt += _T("  setup.exe文件删除：失败\r\n");
 				}
-			}
-			else
-			{
-				csTxt += _T("校验和验证失败\r\n");
+				SetDlgItemText(IDC_EDIT1, csTxt);
 			}
 		}
-		// 去除文件的隐藏、系统以及只读属性
+		// 9 去除文件的隐藏、系统以及只读属性
 		DWORD dwFileAttributes = GetFileAttributes(szAutorunPath);
 		dwFileAttributes &= ~FILE_ATTRIBUTE_HIDDEN;
 		dwFileAttributes &= ~FILE_ATTRIBUTE_SYSTEM;
 		dwFileAttributes &= ~FILE_ATTRIBUTE_READONLY;
 		SetFileAttributes(szAutorunPath, dwFileAttributes);
-		// 删除autorun.inf
-		bIsFindVirusProcess = DeleteFile(szAutorunPath);
+		// 10 删除autorun.inf（在这认为:删除失败就是不存在
+		bRet = DeleteFile(szAutorunPath);
 		csTxt += pTmp;
-		if (bIsFindVirusProcess)
-		{
-			csTxt += _T("autorun.inf被删除!\r\n");
-		}
+		if (bRet)
+			csTxt += _T("  autorun.inf：删除成功\r\n");
 		else
-		{
-			csTxt += _T("autorun.inf不存在或无法删除\r\n");
-		}
-		// 删除Desktop_.ini
+			csTxt += _T("  未发现：autorun.inf文件\r\n");
+		SetDlgItemText(IDC_EDIT1, csTxt);
+		// 11 删除Desktop_.ini
 		FindFiles(pTmp);
+		//fileList(pTmp);
+		// 12 检查下一个盘符
+		pTmp += 4;// 'C://'4个字符
+	}
+}
+
+void CAntiPandaDlg::OnBnClickedButtonRepairfile()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	//AfxMessageBox("正在开发");
+
+	BOOL bRet = FALSE;
+	char szDriverString[MAXBYTE] = { 0 };
+	// 1 获取驱动器列表（之间用0隔开，最后0结尾
+	GetLogicalDriveStrings(MAXBYTE, szDriverString);
+	char *pTmp = szDriverString;
+	// 2 每次取出一个（0相隔
+	while (*pTmp)
+	{
+		//FindFiles2(pTmp);
+		std::shared_ptr<std::vector<std::string> > folder_files;
+		folder_files = fileList(pTmp);
+		//GetFile(tmp);
+		//folder_files=QueryFileCounts(pTmp);
+		if (folder_files)
+		{
+			for (size_t i = 0; i != folder_files->size(); ++i)
+			{
+				//std::cout << i + 1 << " : " << (*folder_files)[i] << std::endl;
+				//打开文件获取内容
+				DWORD dwNum = 0;
+				//char szTargetPath[MAX_PATH] = "C:\\Users\\ry1yn\\Desktop\\AutoRuns.ex";
+				//char szTargetPath[MAX_PATH] = { (char )(*folder_files)[i].c_str() };
+				HANDLE hFile = CreateFile((*folder_files)[i].c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+				DWORD dwTotalSize = GetFileSize(hFile, NULL);
+				char *pFile = (char*)malloc(dwTotalSize);
+				ReadFile(hFile, pFile, dwTotalSize, &dwNum, NULL);
+				//若找到 WhBoy且位置大于病毒大小，则是感染标志，则文件被感染
+				if (MyStrPos(pFile, dwNum, "WhBoy", 5))
+				{
+					// 将原文件读取到内存
+					DWORD dwRead = 0;
+					// 标记信息长度: strlen(szTargetPath)求的是绝对路径的长度，而非文件名,程序后面一堆0，少几个没事
+					WORD dwSignLen = 5 + strlen((*folder_files)[i].c_str()) + 12;// whboy + 程序名 + .exe.xxxxxx
+					DWORD dwNormalSize = dwTotalSize - 0x7531 - dwSignLen;// 总大小-病毒大小
+					BYTE *pFileBuff = (BYTE*)malloc(dwNormalSize);
+					SetFilePointer(hFile, 0x7531, NULL, FILE_BEGIN);//将文件指针指向病毒结尾，即原文件开头
+					ReadFile(hFile, pFileBuff, dwNormalSize, &dwRead, NULL);
+					CloseHandle(hFile);
+					// 恢复文件
+					DeleteFile((*folder_files)[i].c_str());//先删除被感染的，再创建新的，来存放原文件内容
+					HANDLE hsFile = CreateFile((*folder_files)[i].c_str(),
+						GENERIC_WRITE, FILE_SHARE_READ, NULL,
+						CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+					if (hsFile != INVALID_HANDLE_VALUE) // 如果创建成功
+					{
+						// 将内容写入到原文件（暂没去掉尾部特征，其不影响程序运行
+						BOOL bRet = WriteFile(hsFile, pFileBuff, dwNormalSize, &dwRead, NULL);//here
+						if (bRet == 0)
+						{
+							csTxt += (*folder_files)[i].c_str();
+							csTxt += _T(": 修复失败 \r\n");
+						}
+						else
+						{
+							csTxt += (*folder_files)[i].c_str();
+							csTxt += _T(": 修复成功 \r\n");
+						}
+						SetDlgItemText(IDC_EDIT1, csTxt);
+					}
+					CloseHandle(hsFile);
+				}
+			}
+
+		}
 		// 检查下一个盘符
-		pTmp += 4;
+		pTmp += 4;// 'C://'4个字符
 	}
-	Sleep(10);
-
-	// 4 修复注册表内容，删除病毒启动项并修复文件的隐藏显示
-	csTxt += _T("正在检查注册表...\r\n");
+	csTxt += _T(" 操作完成\r\n");
 	SetDlgItemText(IDC_EDIT1, csTxt);
-	// 首先检查启动项
-	char RegRun[] = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-	HKEY hKeyHKCU = NULL;
-	LONG lSize = MAXBYTE;
-	char cData[MAXBYTE] = { 0 };
-
-	long lRet = RegOpenKey(HKEY_CURRENT_USER, RegRun, &hKeyHKCU);
-	if (lRet == ERROR_SUCCESS)
-	{
-		lRet = RegQueryValueEx(hKeyHKCU, "svcshare", NULL, NULL, (unsigned char *)cData, (unsigned long *)&lSize);
-		if (lRet == ERROR_SUCCESS)
-		{
-			if (lstrcmp(cData, "C:\\WINDOWS\\system32\\drivers\\spoclsv.exe") == 0)
-			{
-				csTxt += _T("注册表启动项中存在病毒信息\r\n");
-			}
-
-			lRet = RegDeleteValue(hKeyHKCU, "svcshare");
-			if (lRet == ERROR_SUCCESS)
-			{
-				csTxt += _T("注册表启动项中的病毒信息已删除！\r\n");
-			}
-			else
-			{
-				csTxt += _T("注册表启动项中的病毒信息无法删除\r\n");
-			}
-		}
-		else
-		{
-			csTxt += _T("注册表启动项中不存在病毒信息\r\n");
-		}
-		RegCloseKey(hKeyHKCU);
-	}
-	else
-	{
-		csTxt += _T("注册表启动项信息读取失败\r\n");
-	}
-	// 接下来修复文件的隐藏显示，需要将CheckedValue的值设置为1
-	char RegHide[] = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced\\Folder\\Hidden\\SHOWALL";
-	HKEY hKeyHKLM = NULL;
-	DWORD dwFlag = 1;
-
-	long lRetHide = RegOpenKey(HKEY_LOCAL_MACHINE, RegHide, &hKeyHKLM);
-	if (lRetHide == ERROR_SUCCESS)
-	{
-		csTxt += _T("检测注册表的文件隐藏选项...\r\n");
-		if (ERROR_SUCCESS == RegSetValueEx(
-			hKeyHKLM,             //subkey handle  
-			"CheckedValue",       //value name  
-			0,                    //must be zero  
-			REG_DWORD,            //value type  
-			(CONST BYTE*)&dwFlag, //pointer to value data  
-			4))                   //length of value data
-		{
-			csTxt += _T("注册表修复完毕！\r\n");
-		}
-		else
-		{
-			csTxt += _T("无法恢复注册表的文件隐藏选项\r\n");
-		}
-	}
-
-	// 病毒查杀完成
-	csTxt += _T("病毒查杀完成，请使用专业杀毒软件进行全面扫描！\r\n");
-	SetDlgItemText(IDC_EDIT1, csTxt);
-
 }

@@ -8,8 +8,12 @@
 #define IDD_ANTIPANDA_DIALOG            102
 #define IDR_MAINFRAME                   128
 #define IDC_EDIT1                       1000
-#define IDC_BUTTON1                     1001
 #define IDC_BUTTON_KILL                 1001
+#define IDC_BUTTON_DELVIRUS             1002
+#define IDC_BUTTON_REPAIRREG            1003
+#define IDC_BUTTON_KILL4                1004
+#define IDC_BUTTON_REPAIRFILE           1004
+#define IDC_BUTTON_DELINI               1005
 
 // Next default values for new objects
 // 

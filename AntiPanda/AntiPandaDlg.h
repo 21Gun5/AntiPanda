@@ -33,4 +33,8 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	afx_msg void OnBnClickedButtonKill();
+	afx_msg void OnBnClickedButtonDelvirus();
+	afx_msg void OnBnClickedButtonDelini();
+	afx_msg void OnBnClickedButtonRepairreg();
+	afx_msg void OnBnClickedButtonRepairfile();
 };
