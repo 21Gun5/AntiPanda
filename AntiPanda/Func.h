@@ -4,16 +4,16 @@
 #include <vector>
 #include <cstring>
 #include <queue>
+using namespace std;
 
+#define MAX_PATH 500
 
-BOOL FindTargetProcess(char *pszProcessName, DWORD *dwPid);
-BOOL EnableDebugPrivilege(char *pszPrivilege);
-DWORD CRC32(BYTE* ptr, DWORD Size);
-DWORD WINAPI FindFiles(LPVOID lpszPath);
-DWORD WINAPI FindFiles2(LPVOID lpszPath);
-int findsub(char *str1, char *str2, long sizes);
-BOOL MyStrPos(char* buff, int size, const char* str, int len);
-std::shared_ptr<std::vector<std::string> > fileList(const std::string& folder_path);
-void GetFile(CString lpszPath);
-std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path);
 extern CString csTxt;
+
+BOOL FindVirusProcess(char *pszProcessName, DWORD *dwPid);
+BOOL EnableDebugPrivilege(char *pszPrivilege);
+DWORD GenerateCRC32(BYTE* ptr, DWORD Size);
+DWORD WINAPI DeleteIniFile(LPVOID lpszPath);
+BOOL IsInfected(char* buff, int size, const char* str, int len);
+std::shared_ptr<std::vector<std::string> > fileList(const std::string& folder_path);
+std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path);

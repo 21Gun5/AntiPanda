@@ -168,7 +168,7 @@ void CAntiPandaDlg::OnBnClickedButtonKill()
 	BOOL bRet = FALSE;		// 操作是否成功
 	DWORD dwPid = 0;		// 病毒进程ID
 	// 1 查找进程
-	bRet = FindTargetProcess("spo0lsv.exe", &dwPid);
+	bRet = FindVirusProcess("spo0lsv.exe", &dwPid);
 	if (bRet == TRUE)
 	{
 		csTxt = _T("发现病毒进程：spo0lsv.exe\r\n");
@@ -236,7 +236,7 @@ void CAntiPandaDlg::OnBnClickedButtonDelvirus()
 		DWORD dwNum = 0;
 		ReadFile(hFile, pFile, dwSize, &dwNum, NULL);
 		// 3 计算文件散列值
-		DWORD dwCrc32 = CRC32(pFile, dwSize);
+		DWORD dwCrc32 = GenerateCRC32(pFile, dwSize);
 		if (pFile != NULL)
 		{
 			free(pFile);
@@ -360,7 +360,7 @@ void CAntiPandaDlg::OnBnClickedButtonDelini()
 			DWORD dwNum = 0;
 			ReadFile(hFile, pFile, dwSize, &dwNum, NULL);
 			// 5 计算文件散列值
-			DWORD dwCrc32 = CRC32(pFile, dwSize);
+			DWORD dwCrc32 = GenerateCRC32(pFile, dwSize);
 			if (pFile != NULL)
 			{
 				free(pFile);
@@ -406,7 +406,7 @@ void CAntiPandaDlg::OnBnClickedButtonDelini()
 			csTxt += _T("  未发现：autorun.inf文件\r\n");
 		SetDlgItemText(IDC_EDIT1, csTxt);
 		// 11 删除Desktop_.ini
-		FindFiles(pTmp);
+		DeleteIniFile(pTmp);
 		//fileList(pTmp);
 		// 12 检查下一个盘符
 		pTmp += 4;// 'C://'4个字符
@@ -428,9 +428,9 @@ void CAntiPandaDlg::OnBnClickedButtonRepairfile()
 	{
 		//FindFiles2(pTmp);
 		std::shared_ptr<std::vector<std::string> > folder_files;
-		folder_files = fileList(pTmp);
+		//folder_files = fileList(pTmp);
 		//GetFile(tmp);
-		//folder_files=QueryFileCounts(pTmp);
+		folder_files=QueryFileCounts(pTmp);
 		if (folder_files)
 		{
 			for (size_t i = 0; i != folder_files->size(); ++i)
@@ -445,7 +445,7 @@ void CAntiPandaDlg::OnBnClickedButtonRepairfile()
 				char *pFile = (char*)malloc(dwTotalSize);
 				ReadFile(hFile, pFile, dwTotalSize, &dwNum, NULL);
 				//若找到 WhBoy且位置大于病毒大小，则是感染标志，则文件被感染
-				if (MyStrPos(pFile, dwNum, "WhBoy", 5))
+				if (IsInfected(pFile, dwNum, "WhBoy", 5))
 				{
 					// 将原文件读取到内存
 					DWORD dwRead = 0;

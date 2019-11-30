@@ -2,13 +2,13 @@
 #include "Func.h"
 #include <TlHelp32.h>
 #include <iostream>
-
 #include <memory>
 #include <windows.h>
 
-CString csTxt = NULL;
+CString csTxt = NULL;// 编辑框控件的显示
 
-BOOL FindTargetProcess(char *pszProcessName, DWORD *dwPid)
+// 发现病毒进程
+BOOL FindVirusProcess(char *pszProcessName, DWORD *dwPid)
 {
 	BOOL bFind = FALSE;
 
@@ -37,7 +37,7 @@ BOOL FindTargetProcess(char *pszProcessName, DWORD *dwPid)
 
 	return bFind;
 }
-
+// 提升权限，完成一些受限的操作
 BOOL EnableDebugPrivilege(char *pszPrivilege)
 {
 	HANDLE hToken = INVALID_HANDLE_VALUE;
@@ -64,8 +64,8 @@ BOOL EnableDebugPrivilege(char *pszPrivilege)
 
 	return bRet;
 }
-
-DWORD CRC32(BYTE* ptr, DWORD Size)
+// 计算文件哈希值，判断是否未病毒文件
+DWORD GenerateCRC32(BYTE* ptr, DWORD Size)
 {
 	DWORD crcTable[256], crcTmp1;
 	//动态生成CRC-32表
@@ -89,9 +89,8 @@ DWORD CRC32(BYTE* ptr, DWORD Size)
 	}
 	return (crcTmp2 ^ 0xFFFFFFFF);
 }
-
-#define MAX_PATH 500
-DWORD WINAPI FindFiles(LPVOID lpszPath)
+// 遍历全盘，删除ini文件（递归遍历，速度慢待改进
+DWORD WINAPI DeleteIniFile(LPVOID lpszPath)
 {
 	WIN32_FIND_DATA stFindFile;
 	HANDLE hFindFile;
@@ -128,7 +127,7 @@ DWORD WINAPI FindFiles(LPVOID lpszPath)
 			{
 				if (stFindFile.cFileName[0] != '.')
 				{
-					FindFiles(szFindFile);
+					DeleteIniFile(szFindFile);
 				}
 			}
 			else
@@ -162,106 +161,31 @@ DWORD WINAPI FindFiles(LPVOID lpszPath)
 
 	return 0;
 }
-
-DWORD WINAPI FindFiles2(LPVOID lpszPath)
+// 检查文件是否被感染（文件内容中是否能搜到感染标记
+BOOL IsInfected(char* buff, int size, const char* str, int len)
 {
-	WIN32_FIND_DATA stFindFile;
-	HANDLE hFindFile;
-	// 扫描路径
-	char szPath[MAX_PATH];
-	char szFindFile[MAX_PATH];
-	char szSearch[MAX_PATH];
-	char *szFilter;
-	int len;
-	int ret = 0;
-
-	szFilter = "*.*";
-	lstrcpy(szPath, (char *)lpszPath);
-
-	len = lstrlen(szPath);
-	if (szPath[len - 1] != '\\')
+	bool flag = true;
+	for (int i = size - 1; i > 0; --i)
 	{
-		szPath[len] = '\\';
-		szPath[len + 1] = '\0';
-	}
-
-	lstrcpy(szSearch, szPath);
-	lstrcat(szSearch, szFilter);
-
-	hFindFile = FindFirstFile(szSearch, &stFindFile);
-	if (hFindFile != INVALID_HANDLE_VALUE)
-	{
-		do
+		if (buff[i] == str[len - 1])
 		{
-			lstrcpy(szFindFile, szPath);
-			lstrcat(szFindFile, stFindFile.cFileName);
-
-			if (stFindFile.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+			flag = true;
+			for (int j = len - 2; j >= 0; --j)
 			{
-				if (stFindFile.cFileName[0] != '.')
+				if (buff[i + j - len + 1] != str[j])
 				{
-					FindFiles(szFindFile);
+					flag = false;
 				}
 			}
-			else
+			if (flag)
 			{
-				DWORD dwNum = 0;
-				//char szTargetPath[MAX_PATH] = "C:\\Users\\ry1yn\\Desktop\\AutoRuns.ex";
-				HANDLE hFile = CreateFile(szFindFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-				DWORD dwTotalSize = GetFileSize(hFile, NULL);
-				char *pFile = (char*)malloc(dwTotalSize);
-				ReadFile(hFile, pFile, dwTotalSize, &dwNum, NULL);
-
-				//若找到 WhBoy且位置大于病毒大小，则是感染标志，则文件被感染
-				if (MyStrPos(pFile, dwNum, "WhBoy", 5))
-				{
-					// 将原文件读取到内存
-					DWORD dwRead = 0;
-					// 标记信息长度: strlen(szTargetPath)求的是绝对路径的长度，而非文件名,程序后面一堆0，少几个没事
-					WORD dwSignLen = 5 + strlen(szFindFile) + 12;// whboy + 程序名 + .exe.xxxxxx
-					DWORD dwNormalSize = dwTotalSize - 0x7531 - dwSignLen;// 总大小-病毒大小
-					BYTE *pFileBuff = (BYTE*)malloc(dwNormalSize);
-					SetFilePointer(hFile, 0x7531, NULL, FILE_BEGIN);//将文件指针指向病毒结尾，即原文件开头
-					ReadFile(hFile, pFileBuff, dwNormalSize, &dwRead, NULL);
-					CloseHandle(hFile);
-
-					// 恢复文件
-					DeleteFile(szFindFile);//先删除被感染的，再创建新的，来存放原文件内容
-					HANDLE hsFile = CreateFile(szFindFile,
-						GENERIC_WRITE, FILE_SHARE_READ, NULL,
-						CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-					if (hsFile != INVALID_HANDLE_VALUE) // 如果创建成功
-					{
-						// 将内容写入到原文件（暂没去掉尾部特征，其不影响程序运行
-						BOOL bRet = WriteFile(hsFile, pFileBuff, dwNormalSize, &dwRead, NULL);//here
-						if (bRet == 0)
-						{
-							csTxt += szFindFile;
-							csTxt += _T(": 修复失败 \r\n");
-						}
-						else
-						{
-							csTxt += szFindFile;
-							csTxt += _T(": 修复成功 \r\n");
-						}
-					}
-					CloseHandle(hsFile);
-				}
-
+				return true;
 			}
-			ret = FindNextFile(hFindFile, &stFindFile);
-		} while (ret != 0);
+		}
 	}
-
-	FindClose(hFindFile);
-
-	return 0;
+	return false;
 }
-
-
-
-
-
+// 递归遍历文件（速度慢，待改进）
 std::shared_ptr<std::vector<std::string> > fileList(const std::string& folder_path)
 {
 	static std::shared_ptr<std::vector<std::string> >
@@ -307,124 +231,9 @@ std::shared_ptr<std::vector<std::string> > fileList(const std::string& folder_pa
 	}
 	return folder_files;
 }
-
-
-int findsub(char *str1, char *str2, long sizes)
-{
-	int i = 0, j = 0;
-	while (sizes - i) //多少个字符长度就执行多少次
-	{
-		for (; str1[i] != str2[0]; i++);//后面每个字符比较都不相等就i++
-
-		if (str1[i] == str2[0])//判断首次相等
-		{
-			for (j = 0; str1[i + j] == str2[j]; j++);//后面每个字符比较都相等就j++
-
-			if (str2[j] == '\0')//直到把字符串2都比较完都相等
-			{
-				if (i > 0x7531)// WhBoy可能也出现在病毒数据区，大于病毒大小位置才是真正的标记所在处
-					return i;
-			}
-			// 返回字符串2中出现字符串1的第一个位置
-		}
-		i++; //不相等就继续往后走
-	}
-	return -1;//如果没有找到合适的返回-1.
-}
-
-
-BOOL MyStrPos(char* buff, int size, const char* str, int len)
-{
-	bool flag = true;
-	for (int i = size - 1; i > 0; --i)
-	{
-		if (buff[i] == str[len - 1])
-		{
-			flag = true;
-			for (int j = len - 2; j >= 0; --j)
-			{
-				if (buff[i + j - len + 1] != str[j])
-				{
-					flag = false;
-				}
-			}
-			if (flag)
-			{
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-//#include <queue>
-//using namespace std;
-//void GetFile(CString szFilePath)
-//{
-//	// 获取到盘符
-//	//WaitForSingleObject(g_hMutex2, INFINITE);
-//	//CString szFilePath = g_Drivers.back();
-//	//szFilePath.Append(":");
-//	//g_Drivers.pop_back();
-//	//ReleaseMutex(g_hMutex2);
-//	// 根据获取到的盘符开始遍历
-//	queue<CString> qFolders;
-//	qFolders.push(szFilePath);
-//	WIN32_FIND_DATA FindFileData;
-//	HANDLE hFile = NULL;
-//	USES_CONVERSION;
-//	while (qFolders.size() > 0)
-//	{
-//		// 开始遍历这个目录
-//		CString TempFolder = qFolders.front();
-//		TempFolder.Append("\\*.*");
-//		hFile = FindFirstFile(TempFolder.GetBuffer(), &FindFileData);
-//		do
-//		{
-//			// 拼接为完整路径
-//			TempFolder = qFolders.front();
-//			TempFolder.Append("\\");
-//			TempFolder.Append(FindFileData.cFileName);
-//			// 判断是不是目录
-//			if (FindFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-//			{
-//				// 判断是不是本级目录或上级目录的名称，是的话则结束本次循环
-//				if (!lstrcmp(FindFileData.cFileName, ".") || !lstrcmp(FindFileData.cFileName, ".."))
-//					continue;
-//				// 压入新的目录
-//				qFolders.push(TempFolder);
-//			}
-//			else
-//			{
-//
-//				//// 判断以下是不是Desktop_.ini文件
-//				//if (!lstrcmp(FindFileData.cFileName, "Desktop_.ini"))
-//				//{
-//				//	//WaitForSingleObject(g_hMutex, INFINITE);
-//				//	SetFileAttributes(TempFolder.GetBuffer(), FILE_ATTRIBUTE_ARCHIVE);
-//				//	//if (remove(W2A(TempFolder.GetBuffer())) == 0)
-//				//		//g_FileNum++;
-//				//	//ReleaseMutex(g_hMutex);
-//				//}
-//			}
-//		} while (FindNextFile(hFile, &FindFileData));
-//		qFolders.pop();
-//		if (hFile)
-//		{
-//			FindClose(hFile);
-//			hFile = NULL;
-//		}
-//	}
-//}
-
-
-
-
-using namespace std;
-
+// 非递归遍历文件（仅思路，暂未使用
 std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path)
 {
-
 	static std::shared_ptr<std::vector<std::string> >
 		folder_files(new std::vector<std::string>); //返回指针, 需要迭代使用
 
@@ -435,15 +244,26 @@ std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path)
 	WIN32_FIND_DATA findResult;
 	HANDLE handle = NULL;
 
+
+
+
+
 	while (qFolders.size() > 0)
 	{
 		std::string tempFolder = qFolders.front();
-		tempFolder.append("//*.*");
+		tempFolder.append("\\*.*");
 		handle = FindFirstFile(tempFolder.c_str(), &findResult);
+
+
 		do
 		{
+
+
 			if (findResult.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 			{
+
+
+
 				if (lstrcmp(".", findResult.cFileName) == 0 || lstrcmp("..", findResult.cFileName) == 0)
 				{
 					continue;
@@ -454,9 +274,10 @@ std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path)
 			}
 			else 
 			{
-				folder_files->push_back(tempFolder);
-				//fileCounts++;
+
+				fileCounts++;
 			}
+
 		} while (FindNextFile(handle, &findResult));
 		qFolders.pop();
 	}
@@ -469,4 +290,3 @@ std::shared_ptr<std::vector<std::string> >  QueryFileCounts(LPCTSTR Path)
 	return folder_files;
 }
 
-//QueryFileCounts(L"D:\\feinno\\RunImage")
